@@ -229,7 +229,7 @@ dependencies = [
  "android-activity 0.4.0",
  "glow 0.13.1",
  "jni",
- "khronos-egl 4.1.0",
+ "khronos-egl",
  "libc",
  "ndk-context",
  "openxr",
@@ -2862,16 +2862,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a88f1bda2bd75b0452a14784937d796722fdebfe50df998aeb3f0b7603019a9"
 dependencies = [
  "wasm-bindgen",
-]
-
-[[package]]
-name = "khronos-egl"
-version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c2352bd1d0bceb871cb9d40f24360c8133c11d7486b68b5381c1dd1a32015e3"
-dependencies = [
- "libc",
- "libloading 0.7.4",
 ]
 
 [[package]]
@@ -5699,7 +5689,7 @@ dependencies = [
  "gpu-descriptor",
  "hassle-rs",
  "js-sys",
- "khronos-egl 6.0.0",
+ "khronos-egl",
  "libc",
  "libloading 0.8.5",
  "log",
