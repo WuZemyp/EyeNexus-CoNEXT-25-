@@ -59,14 +59,14 @@ pub fn prepare_ffmpeg_windows() {
     command::download_and_extract_zip(
         &format!(
             "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/{}",
-            "ffmpeg-n5.1-latest-win64-gpl-shared-5.1.zip"
+            "ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip"
         ),
         &download_path,
     )
     .unwrap();
 
     fs::rename(
-        download_path.join("ffmpeg-n5.1-latest-win64-gpl-shared-5.1"),
+        download_path.join("ffmpeg-n7.1-latest-win64-gpl-shared-7.1"),
         download_path.join("ffmpeg"),
     )
     .unwrap();
@@ -246,10 +246,7 @@ fn get_android_openxr_loaders() {
 
     get_openxr_loader(
         "generic",
-        &format!(
-            "https://github.com/KhronosGroup/OpenXR-SDK-Source/releases/download/{}",
-            "release-1.0.27/openxr_loader_for_android-1.0.27.aar",
-        ),
+        "https://repo1.maven.org/maven2/org/khronos/openxr/openxr_loader_for_android/1.1.51/openxr_loader_for_android-1.1.51.aar",
         "prefab/modules/openxr_loader/libs/android.arm64-v8a",
     );
 
