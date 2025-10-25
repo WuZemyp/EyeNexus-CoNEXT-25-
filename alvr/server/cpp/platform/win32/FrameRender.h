@@ -18,7 +18,6 @@
 #include "shared/d3drender.h"
 #include "openvr_driver.h"
 #include "FFR.h"
-#include "../../analyze_use/helper_f.h"
 
 #define GPU_PRIORITY_VAL 7
 
@@ -52,7 +51,7 @@ public:
 	void GetEncodingResolution(uint32_t *width, uint32_t *height);
 	void Reinit_ffr(float centerShiftX, float centerShiftY);
 
-	ComPtr<ID3D11Texture2D> GetTexture(bool saving, uint64_t m_targetTimestampNs);
+	ComPtr<ID3D11Texture2D> GetTexture();
 private:
 	std::shared_ptr<CD3DRender> m_pD3DRender;
 	ComPtr<ID3D11Texture2D> m_pStagingTexture;

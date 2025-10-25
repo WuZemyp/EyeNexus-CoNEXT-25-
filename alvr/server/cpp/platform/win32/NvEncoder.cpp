@@ -11,7 +11,6 @@
 #include <random>
 #include <chrono>
 #include "NvEncoder.h"
-#include "../../analyze_use/helper_f.h"
 #include "alvr_server/Settings.h"
 #include <iostream>
 #include <cmath>
@@ -58,15 +57,6 @@ NvEncoder::NvEncoder(NV_ENC_DEVICE_TYPE eDeviceType, void *pDevice, uint32_t nWi
     void *hEncoder = NULL;
     NVENC_API_CALL(m_nvenc.nvEncOpenEncodeSessionEx(&encodeSessionExParams, &hEncoder));
     m_hEncoder = hEncoder;
-    // std::string e1 = get_path_head();
-    // e1 += "eframe.h264";
-    // e_buf.open(e1.c_str(), std::ios::out|std::ios::binary|std::ios::app);
-    eye_buf.open((get_path_head()+"eye.csv").c_str(), std::ios::out);
-    eye_buf << "target_ts(nanos),leftx,lefty,rightx,righty,count"<<std::endl;
-    qp_buf.open((get_path_head()+"qp.csv").c_str(), std::ios::out);
-    qp_buf << "target_ts(nanos),qp1,qp2,r1,r2,leftX,leftY,rightX,rightY,width,height" << std::endl;
-    ft_buf.open((get_path_head()+"frame_type.csv").c_str(), std::ios::out);
-    ft_buf << "target_ts(nanos),frame_type,eframe_size" << std::endl;
     std::random_device rd;
     generator.seed(rd());
 }
@@ -485,6 +475,7 @@ void NvEncoder::MapResources(uint32_t bfrIdx)
     }
 }
 
+// EyeNexus :: Call when frame is ready
 void NvEncoder::EncodeFrame(std::vector<std::vector<uint8_t>> &vPacket, uint64_t targetTimestampNs, NV_ENC_PIC_PARAMS *pPicParams, int leftx, int lefty, int rightx, int righty)
 {
     vPacket.clear();
@@ -497,35 +488,13 @@ void NvEncoder::EncodeFrame(std::vector<std::vector<uint8_t>> &vPacket, uint64_t
 
     MapResources(bfrIdx);
 
-    bool save_frame = false;
-    bool open_efile = false;
-    int count = get_frame_count();
-
-    if(count%(get_save_frame_feq()*2)==get_save_frame_feq()){
-        (*pPicParams).encodePicFlags = NV_ENC_PIC_FLAG_FORCEIDR;
-        open_efile = true;
-        save_frame = true;
-    }
-    if(count%(get_save_frame_feq()*2)==(get_save_frame_feq()*2-4)){
-        (*pPicParams).encodePicFlags = NV_ENC_PIC_FLAG_FORCEIDR;
-        open_efile = true;
-    }
-    if(count%(get_save_frame_feq()*2)>=(get_save_frame_feq()*2-4)||count%(get_save_frame_feq()*2)==0){
-        save_frame = true;
-        count += get_save_frame_feq()*2-count%(get_save_frame_feq()*2);
-    }
-    if(count%get_save_frame_feq()==0){
-        eye_buf << targetTimestampNs << "," << leftx << "," << lefty << "," << rightx << "," << righty << "," << count << std::endl;
-    }
-
-
 
     NVENCSTATUS nvStatus = DoEncode(m_vMappedInputBuffers[bfrIdx], m_vBitstreamOutputBuffer[bfrIdx], pPicParams);
 
     if (nvStatus == NV_ENC_SUCCESS || nvStatus == NV_ENC_ERR_NEED_MORE_INPUT)
     {
         m_iToSend++;
-        GetEncodedPacket(m_vBitstreamOutputBuffer, vPacket, true, targetTimestampNs, save_frame, count, open_efile);
+        GetEncodedPacket(m_vBitstreamOutputBuffer, vPacket, true, targetTimestampNs);
     }
     else
     {
@@ -626,36 +595,6 @@ int NvEncoder::decompress_x(int x){
     return int(Eye2Texturex(compressed_x*eye_size_ratio_x, is_right)*static_cast<int>(this->optimizedEyeWidth)*2);
 }
 
-int NvEncoder::compress_x(int x){
-    float f_x = float(x)/(2144*2);
-    bool is_right = (f_x>0.5);
-    float eye_x = Texture2Eyex(f_x, is_right) / eye_size_ratio_x;
-    bool under_bound = (eye_x < loBoundC_x);
-    bool over_bound = (eye_x>=hiBoundC_x);
-    // bool in_bound = !(under_bound||over_bound);
-
-    float center_x = eye_x * c2_x / edge_ratio_x +c1_x;
-
-    float d2_x = eye_x *c2_x;
-    float d3_x = (eye_x - 1.)*c2_x + 1.;
-    float g1_x = eye_x/loBoundC_x;
-    float g2_x = (1.-eye_x)/(1. - hiBoundC_x);
-
-    float leftEdge_x = g1_x*center_x+(1. - g1_x) *d2_x;
-    float rightEdge_x = g2_x*center_x+(1. - g2_x) * d3_x;
-    float compressed_x = 0.0;
-    if(under_bound){
-        compressed_x = leftEdge_x;
-    }
-    else if (over_bound)
-    {
-        compressed_x = rightEdge_x;
-    }
-    else{
-        compressed_x = center_x;
-    }
-    return int(Eye2Texturex(compressed_x, is_right)*1280*2);
-}
 
 int NvEncoder::decompress_y(int y){
     int frame_width = Settings::Instance().m_renderWidth/2;
@@ -677,34 +616,6 @@ int NvEncoder::decompress_y(int y){
     return int(compressed_y*eye_size_ratio_y*static_cast<int>(this->optimizedEyeHeight));
 }
 
-int NvEncoder::compress_y(int y){
-    float f_y = float(y)/2336/eye_size_ratio_y;
-    bool under_bound = (f_y<loBoundC_y);
-    bool over_bound = (f_y>=hiBoundC_y);
-    // bool in_bound = !(under_bound||over_bound);
-    float center_y = f_y * c2_y / edge_ratio_y +c1_y;
-
-    float d2_y = f_y * c2_y;
-    float d3_y = (f_y-1.)*c2_y+1.;
-    float g1_y = f_y/loBoundC_y;
-    float g2_y = (1. - f_y)/(1. - hiBoundC_y);
-    
-    float leftEdge_y =  g1_y*center_y + (1. - g1_y) *d2_y;
-    float rightEdge_y = g2_y*center_y + (1. - g2_y) *d3_y;
-
-    float compressed_y = 0.0;
-    if(under_bound){
-        compressed_y =leftEdge_y;
-    }
-    else if (over_bound)
-    {
-        compressed_y = rightEdge_y;
-    }
-    else{
-        compressed_y = center_y;
-    }
-    return int(compressed_y*1216);
-}
 
 int QP_clip(int QP){
     if(QP>31){
@@ -753,12 +664,11 @@ void NvEncoder::reencode_qp_map(){
                     //int qp_offset_basedOnRight = EyeNexus_CalculateQPOffsetValue_rightEye(j,i,c);
                     //int final_qp_offset = (((qp_offset_basedOnLeft) < (qp_offset_basedOnRight)) ? (qp_offset_basedOnLeft) : (qp_offset_basedOnRight));
                     qp_map[i*map_width*2+j] +=3;
-                    //qp_buf<< ", "<<final_qp_offset;
                 }
-                //qp_buf<<std::endl;
     }
 }
 
+// EyeNexus:: Generate QP offset Map based on the gaze location, here the input is X_o, Y_o
 void NvEncoder::GenQPDeltaMap(int leftX, int leftY, int rightX, int rightY, uint64_t targetTimestampNs, float controller_c){
     //initialize QPMap
     bool changed = false;
@@ -769,39 +679,7 @@ void NvEncoder::GenQPDeltaMap(int leftX, int leftY, int rightX, int rightY, uint
         m_qpDeltaMapSize = m_numBlocks * sizeof(NV_ENC_EMPHASIS_MAP_LEVEL);
         qp_map = new int8_t[m_qpDeltaMapSize];
     }
-    // frameCounter ++;
-    // if(frameCounter%3 == 1){
-    //     changed = true;
-    //     // frameCounter = 0;
-    // }
-    // if(changed){
-    //     std::normal_distribution<float> QP_dis(5, 80);
-    //     std::uniform_int_distribution<int> int_dis(0, 3);
-    //     int direct_value1 = QP_dis(generator);
-    //     int direct_value2 = QP_dis(generator);
-    //     int gap1 = int_dis(generator);
-    //     int gap2 = int_dis(generator);
 
-    //     if(QP1 <= direct_value1){
-    //         QP1 += gap1;
-    //     }
-    //     else{
-    //         QP1 -= gap1;
-    //     }
-    //     if(QP2 <= direct_value2){
-    //         QP2 += gap2;
-    //     }
-    //     else{
-    //         QP2 -= gap2;
-    //     }
-    //     QP1 = QP_clip(QP1);
-    //     QP2 = QP_clip(QP2);
-    //     QP1 = -5;
-    //     QP2 = 25;
-
-    //     r1 = 18;
-    //     r2 = 47 -r1;
-    // }
     int frame_width = Settings::Instance().m_renderWidth/2;
 	int frame_height = Settings::Instance().m_renderHeight;
     float centerShiftX = static_cast<float>(leftX) / (static_cast<float>(frame_width));// left eye location x
@@ -839,6 +717,7 @@ void NvEncoder::GenQPDeltaMap(int leftX, int leftY, int rightX, int rightY, uint
     // float centerShiftYAligned = ceil(centerShiftY*1410./(5.0*2.))*(5.0*2.)/1410.;
     Update_decompress_params(centerShiftXAligned,centerShiftYAligned);
 
+    // EyeNexus:: X_o, Y_o is project to X_r, Y_r by foveated spatial decompression
     int r_leftX = (decompress_x(leftX)+15)/16;
     int r_leftY = (decompress_y(leftY)+15)/16;
     int r_rightX = (decompress_x(rightX)+15)/16;//-map_width
@@ -849,22 +728,10 @@ void NvEncoder::GenQPDeltaMap(int leftX, int leftY, int rightX, int rightY, uint
     m_rightX = r_rightX;
     m_rightY = r_rightY;
     this->W = map_width*2/12;
-    //QP1=15;
-    //QP2=45
-    qp_buf << targetTimestampNs;
+
     float c = 2.;
     c = controller_c;
-    // c = 30.;
-    // auto now = std::chrono::steady_clock::now();
-    // auto seed = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
 
-	// 		// Create a random number generator
-	// std::mt19937 generator(seed);  // Mersenne Twister engine
-	// std::uniform_int_distribution<int> distribution(-5, 5);  // Range from -500 to +500
-
-	// 		// Generate a random number
-	// int random_number = distribution(generator);
-    // c+=random_number;
     if(changed){
 
 
@@ -872,9 +739,7 @@ void NvEncoder::GenQPDeltaMap(int leftX, int leftY, int rightX, int rightY, uint
             for(int i = 0; i < map_height; i++){
                 for(int j = 0; j < map_width*2; j++){    
                     qp_map[i*map_width*2+j] = static_cast<int8_t>(24);
-                    //qp_buf<< ", "<<24;
                 }
-                //qp_buf<<std::endl;
             }
         }
         else{
@@ -885,183 +750,13 @@ void NvEncoder::GenQPDeltaMap(int leftX, int leftY, int rightX, int rightY, uint
                     int qp_offset_basedOnRight = EyeNexus_CalculateQPOffsetValue_rightEye(j,i,c);
                     int final_qp_offset = (((qp_offset_basedOnLeft) < (qp_offset_basedOnRight)) ? (qp_offset_basedOnLeft) : (qp_offset_basedOnRight));
                     qp_map[i*map_width*2+j] = static_cast<int8_t>(final_qp_offset);
-                    qp_buf<< ", "<<final_qp_offset;
                 }
-                qp_buf<<std::endl;
             }
         }
-
-        
-
-
-
-
-
-
-
-        // int radius1 = map_width*r1/94;
-        // for(int i=0; i<map_width; i++){
-        //     for(int j=0; j<map_height; j++){
-        //         if(i>=r_leftX-radius1 && i <=r_leftX+radius1 && j>=r_leftY-radius1 && j<=r_leftY+radius1 && (i-r_leftX)*(i-r_leftX)+(j-r_leftY)*(j-r_leftY)<=radius1*radius1){
-        //             qp_map[j*map_width*2+i] = static_cast<int8_t>(QP1);
-        //         }
-        //         else{
-        //             qp_map[j*map_width*2+i] = static_cast<int8_t>(QP2);
-        //         }
-        //         if(i>=r_rightX-radius1 && i<=r_rightX+radius1 && j>=r_rightY-radius1 && j<=r_rightY+radius1 && (i-r_rightX)*(i-r_rightX)+(j-r_rightY)*(j-r_rightY)<=radius1*radius1){
-        //             qp_map[j*map_width*2+i+map_width] = static_cast<int8_t>(QP1);
-        //         }
-        //         else{
-        //             qp_map[j*map_width*2+i+map_width] = static_cast<int8_t>(QP2);
-        //         }
-        //     }
-        // }
     }
      
-    qp_buf<< ", " << leftX 
-    << ", " << leftY
-    << ", " << rightX
-    << ", " << rightY
-    << ", " << m_leftX
-    << ", " << m_leftY
-    << ", " << m_rightX
-    << ", " << m_rightY
-    << ", " << m_nWidth
-    << ", " << m_nHeight
-    << ", " << map_width
-    << ", " << map_height << std::endl;
 }
 
-// void NvEncoder::GenQPDeltaMap(int leftX, int leftY, int rightX, int rightY, uint64_t targetTimestampNs){
-//     bool changed = false;
-//     // if(targetTimestampNs-prev_timestamp>100000000){
-//     //     prev_timestamp = targetTimestampNs;
-//     //     changed = true;
-//     // }
-//     frameCounter ++;
-//     if(frameCounter%3 == 1){
-//         changed = true;
-//         // frameCounter = 0;
-//     }
-//     int r_leftX;
-//     int r_leftY;
-//     int r_rightX;
-//     int r_rightY;
-//     if(changed){
-//         m_numBlocks = (m_nWidth+15)/16*(m_nHeight+15)/16;
-//         m_qpDeltaMapSize = m_numBlocks * sizeof(NV_ENC_EMPHASIS_MAP_LEVEL);
-
-//         r_leftX = (compress_x(leftX)+15)/16;
-//         r_leftY = (compress_y(leftY)+15)/16;
-//         r_rightX = (compress_x(rightX)+15)/16-width;
-//         r_rightY = (compress_y(rightY)+15)/16;
-
-//         delete[] qp_map;
-//         qp_map = new int8_t[m_qpDeltaMapSize];
-//         std::normal_distribution<float> QP_dis(5, 80);
-//         std::uniform_int_distribution<int> int_dis(0, 3);
-//         int direct_value1 = QP_dis(generator);
-//         int direct_value2 = QP_dis(generator);
-//         int gap1 = int_dis(generator);
-//         int gap2 = int_dis(generator);
-
-//         if(QP1 <= direct_value1){
-//             QP1 += gap1;
-//         }
-//         else{
-//             QP1 -= gap1;
-//         }
-//         if(QP2 <= direct_value2){
-//             QP2 += gap2;
-//         }
-//         else{
-//             QP2 -= gap2;
-//         }
-//         QP1 = QP_clip(QP1);
-//         QP2 = QP_clip(QP2);
-
-//         // std::uniform_int_distribution<int> rad_dis(0, 47);
-//         // r1 = rad_dis(generator);
-//         r1 = 18;
-//         r2 = 47 -r1;
-//         int radius1 = width*r1/94;
-//         // QP1 = -10;
-//         // QP2 = 30;
-//         for(int i=0; i<width; i++){
-//             for(int j=0; j<height; j++){
-//                 if(i>=r_leftX-radius1 && i <=r_leftX+radius1 && j>=r_leftY-radius1 && j<=r_leftY+radius1 && (i-r_leftX)*(i-r_leftX)+(j-r_leftY)*(j-r_leftY)<=radius1*radius1){
-//                     qp_map[j*width*2+i] = static_cast<int8_t>(QP1);
-//                 }
-//                 else{
-//                     qp_map[j*width*2+i] = static_cast<int8_t>(QP2);
-//                 }
-//                 if(i>=r_rightX-radius1 && i<=r_rightX+radius1 && j>=r_rightY-radius1 && j<=r_rightY+radius1 && (i-r_rightX)*(i-r_rightX)+(j-r_rightY)*(j-r_rightY)<=radius1*radius1){
-//                     qp_map[j*width*2+i+width] = static_cast<int8_t>(QP1);
-//                 }
-//                 else{
-//                     qp_map[j*width*2+i+width] = static_cast<int8_t>(QP2);
-//                 }
-//             }
-//         }
-        
-//     }
-//     qp_buf << targetTimestampNs 
-//     << ", " << QP1 
-//     << ", " << QP2
-//     << ", " << r1
-//     << ", " << r2 << std::endl;
-
-//     // if(changed || m_leftX != leftX){
-//     //     m_leftX = leftX;
-//     //     changed = true;
-//     // }
-//     // if(changed || m_leftY != leftY){
-//     //     m_leftY = leftY;
-//     //     changed = true;
-//     // }
-//     // if(changed || m_rightX != (rightX)){
-//     //     m_rightX = rightX;
-//     //     changed = true;
-//     // }
-//     // if(changed || m_rightY != rightY){
-//     //     m_rightY = rightY;
-//     //     changed = true;
-//     // }
-//     // // do a central wrap on the four value then ok
-//     // if(changed){
-//     //     qp_map = new int8_t[m_qpDeltaMapSize];
-//     //     int r_leftX = (decompress_x(m_leftX)+15)/16;
-//     //     int r_leftY = (decompress_y(m_leftY)+15)/16;
-//     //     int r_rightX = (decompress_x(m_rightX)+15)/16-width;
-//     //     int r_rightY = (decompress_y(m_rightY)+15)/16;
-//     //     std::ofstream file("nvValue.csv", std::ios_base::app);
-//     //     // Write the integers to the file, separated by commas
-//     //     file << r_leftX << "," << r_leftY << "," << r_rightX << "," << r_rightY << std::endl;
-//     //     // Close the file
-//     //     file.close();
-//     //     int r = width*18/94;
-//     //     for(int i=0; i<width; i++){
-//     //         for(int j=0; j<height; j++){
-//     //             if(i>=r_leftX-r && i<=r_leftX+r && j>=r_leftY-r && j<=r_leftY+r &&(i-r_leftX)*(i-r_leftX)+(j-r_leftY)*(j-r_leftY)<=r*r){
-//     //                 qp_map[j*width*2+i] = static_cast<int8_t>(-19);
-//     //             }
-//     //             else{
-//     //                 qp_map[j*width*2+i] = static_cast<int8_t>(20);
-//     //             }
-//     //         }
-//     //     }
-//     //     for(int i=0; i<width; i++){
-//     //         for(int j=0; j<height; j++){
-//     //             if(i>=r_rightX-r && i<=r_rightX+r && j>=r_rightY-r && j<=r_rightY+r &&(i-r_rightX)*(i-r_rightX)+(j-r_rightY)*(j-r_rightY)<=r*r){
-//     //                 qp_map[j*width*2+i+width] = static_cast<int8_t>(-19);
-//     //             }
-//     //             else{
-//     //                 qp_map[j*width*2+i+width] = static_cast<int8_t>(20);
-//     //             }
-//     //         }
-//     //     }
-//     // }
-// }
 
 NVENCSTATUS NvEncoder::DoEncode(NV_ENC_INPUT_PTR inputBuffer, NV_ENC_OUTPUT_PTR outputBuffer, NV_ENC_PIC_PARAMS *pPicParams)
 {
@@ -1104,11 +799,10 @@ void NvEncoder::EndEncode(std::vector<std::vector<uint8_t>> &vPacket)
     SendEOS();
     uint64_t targetTimestampNs = 0;
 
-    GetEncodedPacket(m_vBitstreamOutputBuffer, vPacket, false, targetTimestampNs, false, 0, false);
-    e_buf.close();
+    GetEncodedPacket(m_vBitstreamOutputBuffer, vPacket, false, targetTimestampNs);
 }
 
-void NvEncoder::GetEncodedPacket(std::vector<NV_ENC_OUTPUT_PTR> &vOutputBuffer, std::vector<std::vector<uint8_t>> &vPacket, bool bOutputDelay, uint64_t targetTimestampNs, bool save_frame=false, int count=0, bool open_efile=false)
+void NvEncoder::GetEncodedPacket(std::vector<NV_ENC_OUTPUT_PTR> &vOutputBuffer, std::vector<std::vector<uint8_t>> &vPacket, bool bOutputDelay, uint64_t targetTimestampNs)
 {
     unsigned i = 0;
     int iEnd = bOutputDelay ? m_iToSend - m_nOutputDelay : m_iToSend;
@@ -1121,36 +815,7 @@ void NvEncoder::GetEncodedPacket(std::vector<NV_ENC_OUTPUT_PTR> &vOutputBuffer, 
         NVENC_API_CALL(m_nvenc.nvEncLockBitstream(m_hEncoder, &lockBitstreamData));
   
         uint8_t *pData = (uint8_t *)lockBitstreamData.bitstreamBufferPtr;
-        // if(get_eframe_lock()){
-        //     e_buf.write(reinterpret_cast<char*>(pData), lockBitstreamData.bitstreamSizeInBytes);
-        // }
-        if(open_efile){
-            std::string e1 = get_path_head();
-            e1 += "eframe_";
-            e1 += std::to_string(count);
-            e1 += ".h264";
-            e_buf.open(e1.c_str(), std::ios::out|std::ios::binary|std::ios::app);
-        }
-        if(save_frame){
-            e_buf.write(reinterpret_cast<char*>(pData), lockBitstreamData.bitstreamSizeInBytes);
-        }
-        else if(e_buf)
-        {
-            e_buf.close();
-        }
 
-        if(checkFrameType){
-            NV_ENC_PIC_TYPE picType = lockBitstreamData.pictureType;
-            if(picType == NV_ENC_PIC_TYPE_IDR || picType == NV_ENC_PIC_TYPE_INTRA_REFRESH){
-                ft_buf << targetTimestampNs << ",I_frame," << lockBitstreamData.bitstreamSizeInBytes << std::endl;
-            }
-            else if(picType == NV_ENC_PIC_TYPE_P){
-                ft_buf <<targetTimestampNs << ",P_frame," << lockBitstreamData.bitstreamSizeInBytes << std::endl;
-            }
-            else{
-                ft_buf << "bugged" << std::endl;
-            }
-        }
         if (vPacket.size() < i + 1)
         {
             vPacket.push_back(std::vector<uint8_t>());

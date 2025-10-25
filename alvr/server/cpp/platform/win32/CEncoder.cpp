@@ -91,23 +91,12 @@
 			m_targetTimestampNs = targetTimestampNs;
 			int frame_width = Settings::Instance().m_renderWidth/2;
 			int frame_height = Settings::Instance().m_renderHeight;
+			// EyeNexus :: Retrieve gaze location
 			m_gaze_location_leftx = int(GetEyeGazeLocationLeftX());
 			m_gaze_location_lefty = int(frame_height-GetEyeGazeLocationLeftY());
 			m_gaze_location_rightx = int(GetEyeGazeLocationRightX());
 			m_gaze_location_righty = int(frame_height-GetEyeGazeLocationRightY());
-			// auto now = std::chrono::steady_clock::now();
-			// auto seed = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-
-			// // Create a random number generator
-			// std::mt19937 generator(seed);  // Mersenne Twister engine
-			// std::uniform_int_distribution<int> distribution(-300, 300);  // Range from -500 to +500
-
-			// // Generate a random number
-			// int random_number = distribution(generator);
-			// m_gaze_location_leftx = int(Settings::Instance().m_renderWidth/2/2+random_number);
-			// m_gaze_location_lefty = int(Settings::Instance().m_renderHeight/2+random_number);
-			// m_gaze_location_rightx = int(Settings::Instance().m_renderWidth/2/2*3+random_number);
-			// m_gaze_location_righty = int(Settings::Instance().m_renderHeight/2+random_number);
+			// EyeNexus :: applied gaze location to achieve foveated spatial compression
 			Info("Render Target: %d %d\n", frame_width, frame_height);
 			if (times%3 == 0){//
 				last_centerShiftX = (static_cast<float>(m_gaze_location_leftx) / (static_cast<float>(frame_width)) - 0.5)*2.0;
@@ -120,8 +109,7 @@
 			if (last_centerShiftY == 0.0){
 				last_centerShiftY = 0.1;
 			}
-			// float centerShiftX = static_cast<float>(m_gaze_location_leftx) / 2144.0;
-			// float centerShiftY = static_cast<float>(m_gaze_location_lefty) / 2366.0;
+			// EyeNexus :: Reinit the foveated spatial compression formula using gaze location as center
 			m_FrameRender->Startup(last_centerShiftX, last_centerShiftY);
 			m_FrameRender->Reinit_ffr(last_centerShiftX, last_centerShiftY);
 			//Info("reinit called for : %d centershiftX is : %d centershiftY : %d\n",targetTimestampNs,centerShiftX, centerShiftY);
@@ -140,9 +128,9 @@
 				if (m_bExiting)
 					break;
 
-				if (m_FrameRender->GetTexture(false,m_targetTimestampNs))
+				if (m_FrameRender->GetTexture())
 				{
-					m_videoEncoder->Transmit(m_FrameRender->GetTexture(true,m_targetTimestampNs).Get(), m_presentationTime, m_targetTimestampNs, m_scheduler.CheckIDRInsertion(),m_gaze_location_leftx,m_gaze_location_lefty,m_gaze_location_rightx,m_gaze_location_righty,last_centerShiftX,last_centerShiftY);
+					m_videoEncoder->Transmit(m_FrameRender->GetTexture().Get(), m_presentationTime, m_targetTimestampNs, m_scheduler.CheckIDRInsertion(),m_gaze_location_leftx,m_gaze_location_lefty,m_gaze_location_rightx,m_gaze_location_righty,last_centerShiftX,last_centerShiftY);
 				}
 
 				m_encodeFinished.Set();

@@ -156,6 +156,8 @@ fn create_csv_file_for_MTP_statistics(filename: &str) -> Result<(), Box<dyn Erro
 
     Ok(())
 }
+
+// EyeNexus :: compute gaze location (X_o, Y_o) for both eye from VR to Screen Space Coordinates
 pub fn compute_eye_gaze_location(
     frame_width: i32,
     frame_height: i32,

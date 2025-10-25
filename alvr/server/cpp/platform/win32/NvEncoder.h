@@ -21,7 +21,6 @@
 #include <string.h>
 #include "NvCodecUtils.h"
 #include <cmath>
-#include "../../analyze_use/config.h"
 #include <random>
 
 /**
@@ -376,7 +375,7 @@ private:
     *  This is called by DoEncode() function. If there is buffering enabled,
     *  this may return without any output data.
     */
-    void GetEncodedPacket(std::vector<NV_ENC_OUTPUT_PTR> &vOutputBuffer, std::vector<std::vector<uint8_t>> &vPacket, bool bOutputDelay, uint64_t targetTimestampNs, bool save_frame, int count, bool open_efile);
+    void GetEncodedPacket(std::vector<NV_ENC_OUTPUT_PTR> &vOutputBuffer, std::vector<std::vector<uint8_t>> &vPacket, bool bOutputDelay, uint64_t targetTimestampNs);
 
     /**
     *  @brief This is a private function which is used to initialize the bitstream buffers.
@@ -481,6 +480,7 @@ private:
     int m_leftY=-1;
     int m_rightX=-1;
     int m_rightY=-1;
+    // EyeNexus :: Foveated spatial decompression variable. Part of the value, which is independent of the gaze position, is hard-coded. Detail can refer Appendix E.
     float c0_x = 0.2761195;//no change
     float c1_x = 0.2910448;
     float c2_x = 2.343283;//no change
@@ -500,10 +500,6 @@ private:
     float edge_ratio_y = 5.0;//no change
     float eye_size_ratio_y = 0.993421;//no change
     bool checkFrameType = true;
-    std::fstream e_buf;
-    std::fstream eye_buf;
-    std::fstream qp_buf;
-    std::fstream ft_buf;
     std::mt19937 generator;
     uint64_t prev_timestamp = 0;
     int QP1 = 0;
