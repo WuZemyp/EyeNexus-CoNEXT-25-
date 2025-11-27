@@ -1,0 +1,36 @@
+#ifndef ALVRCLIENT_PACKETTYPES_H
+#define ALVRCLIENT_PACKETTYPES_H
+#include <stdint.h>
+#include <assert.h>
+#include "../alvr_server/bindings.h"
+
+enum ALVR_CODEC {
+	ALVR_CODEC_H264 = 0,
+	ALVR_CODEC_H265 = 1,
+};
+
+enum ALVR_RATE_CONTROL_METHOD {
+	ALVR_CBR = 0,
+	ALVR_VBR = 1,
+};
+
+enum ALVR_ENTROPY_CODING {
+	ALVR_CABAC = 0,
+	ALVR_CAVLC = 1,
+};
+
+enum ALVR_ENCODER_QUALITY_PRESET {
+	ALVR_QUALITY = 0,
+	ALVR_BALANCED = 1,
+	ALVR_SPEED = 2
+};
+
+enum ALVR_INPUT {
+	ALVR_INPUT_FINGER_INDEX,
+	ALVR_INPUT_FINGER_MIDDLE,
+	ALVR_INPUT_FINGER_RING,
+	ALVR_INPUT_FINGER_PINKY,
+};
+#define ALVR_BUTTON_FLAG(input) (1ULL << input)
+
+#endif //ALVRCLIENT_PACKETTYPES_H
