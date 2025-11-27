@@ -29,7 +29,7 @@ bytes = "1"
 chrono = "0.4"
 fern = "0.6"
 futures = "0.3"
-headers = "0.3"
+headers = "0.4"
 hyper = { version = "0.14", features = [
     "http2",
     "server",
