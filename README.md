@@ -37,7 +37,7 @@ This project is built upon the open-source **ALVR** codebase.
 
 #### 1. Clone the Project
 ```bash
-git clone https://github.com/YourUsername/EyeNexus.git
+git clone https://github.com/WuZemyp/EyeNexus-CoNEXT-25-.git
 cd EyeNexus
 ```
 
